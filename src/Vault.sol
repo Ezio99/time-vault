@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
@@ -9,6 +9,9 @@ contract Vault {
     error Vault__TooMuchTimeToLock();
     error Vault__TooLittleTimeToLock();
 
+
+    event MoneyLocked(address indexed client,uint128 indexed balance,uint128 indexed unlockTime);
+
     struct Locker {
         uint128 balance;
         uint128 unlockTime;
@@ -18,7 +21,7 @@ contract Vault {
     address private immutable iOwner;
     AggregatorV3Interface private immutable iPriceFeed;
 
-    uint256 private constant MIN_USD_PRICE_TO_STORE = 5;
+    uint256 private constant MIN_USD_PRICE_TO_STORE = 5 * 1e18;
     uint256 private constant MIN_TIME_TO_LOCK = 60;
     uint256 private constant MAX_TIME_TO_LOCK = 60 * 60 * 24 * 365 * 10;
 
@@ -42,14 +45,20 @@ contract Vault {
 
         Locker storage locker = sBalances[msg.sender];
 
+        uint128 unlockTime;
+        uint128 newBalance = locker.balance + uint128(msg.value);
+
         if (locker.balance == 0) {
-            locker.unlockTime = uint128(block.timestamp + _secondsToLockMoney);
+            unlockTime = uint128(block.timestamp + _secondsToLockMoney);
         } else {
             uint128 newUnlockTime = uint128(block.timestamp + _secondsToLockMoney);
-            locker.unlockTime = locker.unlockTime > newUnlockTime ? locker.unlockTime : newUnlockTime;
+            unlockTime = locker.unlockTime > newUnlockTime ? locker.unlockTime : newUnlockTime;
         }
 
-        locker.balance += uint128(msg.value);
+        locker.balance += newBalance;
+        locker.unlockTime=unlockTime;
+
+        emit MoneyLocked(msg.sender, newBalance, unlockTime);
     }
 
     function getUSDPrice(uint256 ethValue) internal view returns (uint256 price) {
