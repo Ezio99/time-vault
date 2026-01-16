@@ -8,9 +8,11 @@ contract Vault {
     error Vault__NotEnoughEthSent();
     error Vault__TooMuchTimeToLock();
     error Vault__TooLittleTimeToLock();
+    error Vault__NotUnlockTime();
+    error Vault__NoLocker();
+    error Vault__ErrorWhileSendingBalance();
 
-
-    event MoneyLocked(address indexed client,uint128 indexed balance,uint128 indexed unlockTime);
+    event MoneyLocked(address indexed client, uint128 indexed balance, uint128 indexed unlockTime);
 
     struct Locker {
         uint128 balance;
@@ -56,9 +58,31 @@ contract Vault {
         }
 
         locker.balance += newBalance;
-        locker.unlockTime=unlockTime;
+        locker.unlockTime = unlockTime;
 
         emit MoneyLocked(msg.sender, newBalance, unlockTime);
+    }
+
+    function withdraw() external {
+        Locker memory mLocker = sBalances[msg.sender];
+        
+
+
+        if (mLocker.balance == 0) {
+            revert Vault__NoLocker();
+        }
+
+        if (mLocker.unlockTime > block.timestamp) {
+            revert Vault__NotUnlockTime();
+        }
+
+        delete sBalances[msg.sender];
+
+        (bool callSuccess,) = payable(msg.sender).call{value: mLocker.balance}("");
+
+        if (!callSuccess) {
+            revert Vault__ErrorWhileSendingBalance();
+        }
     }
 
     function getUSDPrice(uint256 ethValue) internal view returns (uint256 price) {
