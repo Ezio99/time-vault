@@ -24,7 +24,7 @@ contract Vault {
 
     mapping(address => Locker) sBalances;
     address private immutable I_OWNER;
-    AggregatorV3Interface private immutable I_PRICE_FEED;
+    AggregatorV3Interface public immutable I_PRICE_FEED;
 
     uint256 private constant MIN_USD_PRICE_TO_STORE = 5 * 1e18;
     uint256 private constant MIN_TIME_TO_LOCK = 60;
