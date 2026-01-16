@@ -30,22 +30,22 @@ contract DeployVault is Script, CodeConstants {
         chainToPriceFeedMapping[ANVIL_CHAIN_ID] = address(mock);
     }
 
-    function deploy(uint256 chainId) public returns (Vault) {
-        if (chainId == ANVIL_CHAIN_ID) {
+    function deploy() public returns (Vault) {
+        if (block.chainid == ANVIL_CHAIN_ID) {
             deployLocalMock();
         }
 
-        if (chainToPriceFeedMapping[chainId] == address(0)) {
+        if (chainToPriceFeedMapping[block.chainid] == address(0)) {
             revert DeployVault__ChainNotSupported();
         }
 
         vm.startBroadcast();
-        Vault vault = new Vault(chainToPriceFeedMapping[chainId]);
+        Vault vault = new Vault(chainToPriceFeedMapping[block.chainid]);
         vm.stopBroadcast();
         return vault;
     }
 
     function run() external returns (Vault) {
-        return deploy(block.chainid);
+        return deploy();
     }
 }
