@@ -2,8 +2,11 @@
 pragma solidity ^0.8.19;
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 contract Vault {
+    using SafeCast for uint256;
+
     error Vault__PriceIsNegative();
     error Vault__NotEnoughEthSent();
     error Vault__TooMuchTimeToLock();
@@ -20,16 +23,16 @@ contract Vault {
     }
 
     mapping(address => Locker) sBalances;
-    address private immutable iOwner;
-    AggregatorV3Interface private immutable iPriceFeed;
+    address private immutable I_OWNER;
+    AggregatorV3Interface private immutable I_PRICE_FEED;
 
     uint256 private constant MIN_USD_PRICE_TO_STORE = 5 * 1e18;
     uint256 private constant MIN_TIME_TO_LOCK = 60;
     uint256 private constant MAX_TIME_TO_LOCK = 60 * 60 * 24 * 365 * 10;
 
     constructor(address priceFeedAddress) {
-        iOwner = msg.sender;
-        iPriceFeed = AggregatorV3Interface(priceFeedAddress);
+        I_OWNER = msg.sender;
+        I_PRICE_FEED = AggregatorV3Interface(priceFeedAddress);
     }
 
     function deposit(uint256 _secondsToLockMoney) external payable {
@@ -41,19 +44,19 @@ contract Vault {
             revert Vault__TooMuchTimeToLock();
         }
 
-        if (getUSDPrice(msg.value) < MIN_USD_PRICE_TO_STORE) {
+        if (getUsdPrice(msg.value) < MIN_USD_PRICE_TO_STORE) {
             revert Vault__NotEnoughEthSent();
         }
 
         Locker storage locker = sBalances[msg.sender];
 
         uint128 unlockTime;
-        uint128 newBalance = locker.balance + uint128(msg.value);
+        uint128 newBalance = msg.value.toUint128();
 
         if (locker.balance == 0) {
-            unlockTime = uint128(block.timestamp + _secondsToLockMoney);
+            unlockTime = (block.timestamp + _secondsToLockMoney).toUint128();
         } else {
-            uint128 newUnlockTime = uint128(block.timestamp + _secondsToLockMoney);
+            uint128 newUnlockTime = (block.timestamp + _secondsToLockMoney).toUint128();
             unlockTime = locker.unlockTime > newUnlockTime ? locker.unlockTime : newUnlockTime;
         }
 
@@ -65,8 +68,6 @@ contract Vault {
 
     function withdraw() external {
         Locker memory mLocker = sBalances[msg.sender];
-        
-
 
         if (mLocker.balance == 0) {
             revert Vault__NoLocker();
@@ -85,12 +86,12 @@ contract Vault {
         }
     }
 
-    function getUSDPrice(uint256 ethValue) internal view returns (uint256 price) {
-        return (ethValue * getLatestETHToUSDPrice()) / 1e18;
+    function getUsdPrice(uint256 ethValue) internal view returns (uint256 price) {
+        return (ethValue * getLatestEthToUsdPrice()) / 1e18;
     }
 
-    function getLatestETHToUSDPrice() internal view returns (uint256 price) {
-        (, int256 rawPrice,,,) = iPriceFeed.latestRoundData();
+    function getLatestEthToUsdPrice() internal view returns (uint256 price) {
+        (, int256 rawPrice,,,) = I_PRICE_FEED.latestRoundData();
 
         if (rawPrice < 0) {
             revert Vault__PriceIsNegative();
