@@ -12,6 +12,6 @@ contract Vault {
     }
 
     function deposit(uint256 _secondsToLockMoney) payable external{
-        
+        require()
     }
 }
