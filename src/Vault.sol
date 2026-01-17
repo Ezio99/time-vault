@@ -22,7 +22,7 @@ contract Vault {
         uint128 unlockTime;
     }
 
-    mapping(address => Locker) sBalances;
+    mapping(address => Locker) private sBalances;
     address private immutable I_OWNER;
     AggregatorV3Interface public immutable I_PRICE_FEED;
 
@@ -98,5 +98,9 @@ contract Vault {
         }
 
         return uint256(rawPrice) * 1e10;
+    }
+
+    function getLocker(address _address) public view returns (Locker memory) {
+        return sBalances[_address];
     }
 }
