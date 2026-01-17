@@ -90,7 +90,7 @@ contract VaultTest is Test {
     }
 
     //MARK: Withdraw
-    function testSUccessfulWithdraw() public {
+    function testSuccessfulWithdraw() public {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
         assertEq(vault.getLocker(USER).balance, AMOUNT_TO_SEND);
         assertEq(USER.balance, DEAL_AMOUNT - AMOUNT_TO_SEND);
@@ -99,4 +99,20 @@ contract VaultTest is Test {
         withdrawMoney();
         assertEq(USER.balance, DEAL_AMOUNT);
     }
+
+    function testWithdrawNoLockerPresent() public {
+        vm.expectRevert(Vault.Vault__NoLocker.selector);
+        withdrawMoney();
+    }
+
+    function testWithdrawBeforeTime() public {
+        depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+        assertEq(vault.getLocker(USER).balance, AMOUNT_TO_SEND);
+        assertEq(USER.balance, DEAL_AMOUNT - AMOUNT_TO_SEND);
+
+        vm.expectRevert(Vault.Vault__NotUnlockTime.selector);
+        withdrawMoney();
+    }
+
+
 }
