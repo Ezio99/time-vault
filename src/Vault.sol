@@ -26,9 +26,9 @@ contract Vault {
     address private immutable I_OWNER;
     AggregatorV3Interface public immutable I_PRICE_FEED;
 
-    uint256 private constant MIN_USD_PRICE_TO_STORE = 5 * 1e18;
-    uint256 private constant MIN_TIME_TO_LOCK = 60;
-    uint256 private constant MAX_TIME_TO_LOCK = 60 * 60 * 24 * 365 * 10;
+    uint256 public constant MIN_USD_PRICE_TO_STORE = 5 * 1e18;
+    uint256 public constant MIN_TIME_TO_LOCK = 60;
+    uint256 public constant MAX_TIME_TO_LOCK = 60 * 60 * 24 * 365 * 10;
 
     constructor(address priceFeedAddress) {
         I_OWNER = msg.sender;
@@ -86,11 +86,11 @@ contract Vault {
         }
     }
 
-    function getUsdPrice(uint256 ethValue) internal view returns (uint256 price) {
+    function getUsdPrice(uint256 ethValue) public view returns (uint256 price) {
         return (ethValue * getLatestEthToUsdPrice()) / 1e18;
     }
 
-    function getLatestEthToUsdPrice() internal view returns (uint256 price) {
+    function getLatestEthToUsdPrice() public view returns (uint256 price) {
         (, int256 rawPrice,,,) = I_PRICE_FEED.latestRoundData();
 
         if (rawPrice < 0) {
