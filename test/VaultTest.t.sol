@@ -113,6 +113,4 @@ contract VaultTest is Test {
         vm.expectRevert(Vault.Vault__NotUnlockTime.selector);
         withdrawMoney();
     }
-
-
 }
