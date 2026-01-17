@@ -10,6 +10,9 @@ contract VaultTest is Test {
     MockV3Aggregator mockV3Aggregator;
     Vault vault;
 
+    uint256 public constant AMOUNT_TO_SEND = 0.5 ether;
+    uint256 public constant DEAL_AMOUNT = 10 ether;
+
     address USER = makeAddr("user");
 
     function setUp() public {
@@ -18,17 +21,28 @@ contract VaultTest is Test {
         mockV3Aggregator = MockV3Aggregator(address(vault.I_PRICE_FEED()));
         // Set an initial price (e.g., $2000 ETH/USD with 8 decimals)
         mockV3Aggregator.updateAnswer(2000e8);
-        vm.deal(USER, 10 ether);
+        vm.deal(USER, DEAL_AMOUNT);
     }
 
-    // function testSendLessMoney() public{
-    //     uint256 amount = (vault.MIN_USD_PRICE_TO_STORE() * vault.getLatestEthToUsdPrice())-1e18;
-    //     vm.expectRevert(Vault.Vault__NotEnoughEthSent.selector);
-    //     vm.prank(USER);
-    //     vault.deposit{value:amount}(vault.MIN_TIME_TO_LOCK());
-    // }
+    //MARK: Utility functions
+    function depositMoney(uint256 _secondsToLockMoney, uint256 _amountToDeposit) public {
+        vm.prank(USER);
+        vault.deposit{value: _amountToDeposit}(_secondsToLockMoney);
+    }
 
-    function testSendLessMoney() public {
+    function withdrawMoney() public {
+        vm.prank(USER);
+        vault.withdraw();
+    }
+
+    //MARK: Deposit
+
+    function testDepositMoney() public {
+        depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+        assertEq(vault.getLocker(USER).balance, AMOUNT_TO_SEND);
+    }
+
+    function testDepositLessMoney() public {
         uint256 minUsd = vault.MIN_USD_PRICE_TO_STORE();
         uint256 price = vault.getLatestEthToUsdPrice();
 
@@ -39,16 +53,50 @@ contract VaultTest is Test {
         uint256 amountToSend = minEth - 1;
         uint256 time = vault.MIN_TIME_TO_LOCK();
 
-        // --- DEBUG LOGS ---
-        console2.log("Min USD (Contract):", minUsd); // Should be 5000000000000000000 (5e18)
-        console2.log("Price (Contract):", price); // Should be 2000000000000000000000 (2000e18)
-        console2.log("Calculated Min ETH:", minEth);
-        console2.log("Sending Amount:", amountToSend);
-        // ------------------
-
         vm.prank(USER);
         vm.expectRevert(Vault.Vault__NotEnoughEthSent.selector);
         vault.deposit{value: amountToSend}(time);
-        console2.log("Hello");
+    }
+
+    function testDepositWithLessTime() public {
+        uint256 time = vault.MIN_TIME_TO_LOCK() - 1;
+
+        vm.prank(USER);
+        vm.expectRevert(Vault.Vault__TooLittleTimeToLock.selector);
+        vault.deposit{value: AMOUNT_TO_SEND}(time);
+    }
+
+    function testDepositWithMoreTime() public {
+        uint256 time = vault.MAX_TIME_TO_LOCK() + 1;
+
+        vm.prank(USER);
+        vm.expectRevert(Vault.Vault__TooMuchTimeToLock.selector);
+        vault.deposit{value: AMOUNT_TO_SEND}(time);
+    }
+
+    function testTopUpLocker() public {
+        depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+        depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+
+        assertEq(vault.getLocker(USER).balance, AMOUNT_TO_SEND * 2);
+    }
+
+    function testTopUpLockerVariableTime() public {
+        depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+        depositMoney(vault.MAX_TIME_TO_LOCK() - 1, AMOUNT_TO_SEND);
+
+        assertEq(vault.getLocker(USER).balance, AMOUNT_TO_SEND * 2);
+        assertEq(vault.getLocker(USER).unlockTime, vault.MAX_TIME_TO_LOCK());
+    }
+
+    //MARK: Withdraw
+    function testSUccessfulWithdraw() public {
+        depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+        assertEq(vault.getLocker(USER).balance, AMOUNT_TO_SEND);
+        assertEq(USER.balance, DEAL_AMOUNT - AMOUNT_TO_SEND);
+
+        vm.warp(vault.MIN_TIME_TO_LOCK() + 1);
+        withdrawMoney();
+        assertEq(USER.balance, DEAL_AMOUNT);
     }
 }
