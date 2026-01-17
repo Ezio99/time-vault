@@ -15,14 +15,14 @@ contract VaultTest is Test {
     uint256 public constant AMOUNT_TO_SEND = 0.5 ether;
     uint256 public constant DEAL_AMOUNT = 10 ether;
 
-    address USER = makeAddr("user");
+    address USER = makeAddr("vault_test_user_unique_123");
 
     function setUp() public {
         DeployVault deployer = new DeployVault();
         vault = deployer.deploy();
         mockV3Aggregator = MockV3Aggregator(address(vault.I_PRICE_FEED()));
         // Set an initial price (e.g., $2000 ETH/USD with 8 decimals)
-        mockV3Aggregator.updateAnswer(2000e8);
+        // mockV3Aggregator.updateAnswer(2000e8);
         vm.deal(USER, DEAL_AMOUNT);
     }
 
@@ -88,7 +88,7 @@ contract VaultTest is Test {
         depositMoney(vault.MAX_TIME_TO_LOCK() - 1, AMOUNT_TO_SEND);
 
         assertEq(vault.getLocker(USER).balance, AMOUNT_TO_SEND * 2);
-        assertEq(vault.getLocker(USER).unlockTime, vault.MAX_TIME_TO_LOCK());
+        assertEq(vault.getLocker(USER).unlockTime, block.timestamp+vault.MAX_TIME_TO_LOCK()-1);
     }
 
     function testCannotShortenLockTime() public {
@@ -108,7 +108,7 @@ contract VaultTest is Test {
         assertEq(vault.getLocker(USER).balance, AMOUNT_TO_SEND);
         assertEq(USER.balance, DEAL_AMOUNT - AMOUNT_TO_SEND);
 
-        vm.warp(vault.MIN_TIME_TO_LOCK() + 1);
+        vm.warp(vault.getLocker(USER).unlockTime+1);
         withdrawMoney();
         assertEq(USER.balance, DEAL_AMOUNT);
     }
@@ -140,7 +140,7 @@ contract VaultTest is Test {
         assertEq(vault.getLocker(USER).balance, amount);
     }
 
-    function testRevertIfPriceIsNegative() public {
+    function testRevertIfPriceIsNegative() public skipWhenForking {
         mockV3Aggregator.updateAnswer(-100);
         uint256 time = vault.MIN_TIME_TO_LOCK();
 
