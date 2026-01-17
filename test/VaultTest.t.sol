@@ -7,6 +7,9 @@ import {DeployVault, CodeConstants} from "script/DeployVault.s.sol";
 import {MockV3Aggregator} from "@chainlink/contracts/src/v0.8/tests/MockV3Aggregator.sol";
 
 contract VaultTest is Test {
+    event MoneyLocked(address indexed client, uint128 indexed balance, uint128 indexed unlockTime);
+
+
     MockV3Aggregator mockV3Aggregator;
     Vault vault;
 
@@ -89,6 +92,17 @@ contract VaultTest is Test {
         assertEq(vault.getLocker(USER).unlockTime, vault.MAX_TIME_TO_LOCK());
     }
 
+       function testCannotShortenLockTime() public {
+        uint256 longTime = 1000;
+        depositMoney(longTime, AMOUNT_TO_SEND);
+        uint256 initialUnlockTime = vault.getLocker(USER).unlockTime;
+
+        depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+
+        uint256 finalUnlockTime = vault.getLocker(USER).unlockTime;
+        assertEq(finalUnlockTime, initialUnlockTime); 
+    }
+
     //MARK: Withdraw
     function testSuccessfulWithdraw() public {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
@@ -113,4 +127,45 @@ contract VaultTest is Test {
         vm.expectRevert(Vault.Vault__NotUnlockTime.selector);
         withdrawMoney();
     }
+
+    function testFuzzDeposit(uint256 amount, uint256 time) public {
+        amount = bound(amount, 0.1 ether, 100_000 ether); 
+        
+        
+        time = bound(time, vault.MIN_TIME_TO_LOCK(), vault.MAX_TIME_TO_LOCK());
+
+        vm.deal(USER, amount);
+        vm.prank(USER);
+        
+        vault.deposit{value: amount}(time);
+
+        
+        assertEq(vault.getLocker(USER).balance, amount);
+    }
+
+
+    function testRevertIfPriceIsNegative() public {
+        
+        mockV3Aggregator.updateAnswer(-100); 
+        uint256 time = vault.MIN_TIME_TO_LOCK();
+
+        
+        vm.prank(USER);
+        vm.expectRevert(Vault.Vault__PriceIsNegative.selector);
+        
+        
+        vault.deposit{value: AMOUNT_TO_SEND}(time);
+    }
+
+    //MARK: Events
+    function testEmitMoneyLockedEvent() public {
+        vm.expectEmit(true, true, true, false); 
+        
+        uint128 expectedUnlock = uint128(block.timestamp + vault.MIN_TIME_TO_LOCK());
+        emit MoneyLocked(USER, uint128(AMOUNT_TO_SEND), expectedUnlock);
+
+        depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+    }
+
+ 
 }
