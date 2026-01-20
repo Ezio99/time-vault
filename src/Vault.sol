@@ -23,7 +23,7 @@ contract Vault {
     }
 
     //Depositer -> Beneficiary -> Locker
-    mapping(address => mapping(address => Locker)) private sBalances;
+    mapping(address => mapping(address => Locker)) private sLockers;
     address private immutable I_OWNER;
     AggregatorV3Interface public immutable I_PRICE_FEED;
 
@@ -36,8 +36,12 @@ contract Vault {
         I_PRICE_FEED = AggregatorV3Interface(priceFeedAddress);
     }
 
+    function deposit(uint256 _secondsToLockMoney) external payable {
+        deposit(_secondsToLockMoney, msg.sender);
+    }
+
     //Depositor calls i.e msg.sender = depositor
-    function deposit(uint256 _secondsToLockMoney, address _beneficiary) external payable {
+    function deposit(uint256 _secondsToLockMoney, address _beneficiary) public payable {
         if (_secondsToLockMoney < MIN_TIME_TO_LOCK) {
             revert Vault__TooLittleTimeToLock();
         }
@@ -50,7 +54,7 @@ contract Vault {
             revert Vault__NotEnoughEthSent();
         }
 
-        Locker storage locker = sBalances[msg.sender][_beneficiary];
+        Locker storage locker = sLockers[msg.sender][_beneficiary];
 
         uint128 unlockTime;
         uint128 newBalance = msg.value.toUint128();
@@ -70,7 +74,7 @@ contract Vault {
 
     //Beneficiary calls i.e msg.sender = Beneficiary
     function withdraw(address lockerOwner) external {
-        Locker memory mLocker = sBalances[lockerOwner][msg.sender];
+        Locker memory mLocker = sLockers[lockerOwner][msg.sender];
 
         if (mLocker.balance == 0) {
             revert Vault__NoLocker();
@@ -80,7 +84,7 @@ contract Vault {
             revert Vault__NotUnlockTime();
         }
 
-        delete sBalances[lockerOwner][msg.sender];
+        delete sLockers[lockerOwner][msg.sender];
 
         (bool callSuccess,) = payable(msg.sender).call{value: mLocker.balance}("");
 
@@ -104,6 +108,10 @@ contract Vault {
     }
 
     function getLocker(address _depositor, address _beneficiary) public view returns (Locker memory) {
-        return sBalances[_depositor][_beneficiary];
+        return sLockers[_depositor][_beneficiary];
+    }
+
+    function getOwner() public view returns (address) {
+        return I_OWNER;
     }
 }
