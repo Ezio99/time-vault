@@ -15,14 +15,15 @@ contract Vault {
     error Vault__NoLocker();
     error Vault__ErrorWhileSendingBalance();
 
-    event MoneyLocked(address indexed client, uint128 indexed balance, uint128 indexed unlockTime);
+    event MoneyLocked(address indexed client, uint128 indexed balance, address indexed beneficiary, uint128 unlockTime);
 
     struct Locker {
         uint128 balance;
         uint128 unlockTime;
     }
 
-    mapping(address => Locker) private sBalances;
+    //Depositer -> Beneficiary -> Locker
+    mapping(address => mapping(address => Locker)) private sLockers;
     address private immutable I_OWNER;
     AggregatorV3Interface public immutable I_PRICE_FEED;
 
@@ -36,6 +37,11 @@ contract Vault {
     }
 
     function deposit(uint256 _secondsToLockMoney) external payable {
+        deposit(_secondsToLockMoney, msg.sender);
+    }
+
+    //Depositor calls i.e msg.sender = depositor
+    function deposit(uint256 _secondsToLockMoney, address _beneficiary) public payable {
         if (_secondsToLockMoney < MIN_TIME_TO_LOCK) {
             revert Vault__TooLittleTimeToLock();
         }
@@ -48,7 +54,7 @@ contract Vault {
             revert Vault__NotEnoughEthSent();
         }
 
-        Locker storage locker = sBalances[msg.sender];
+        Locker storage locker = sLockers[msg.sender][_beneficiary];
 
         uint128 unlockTime;
         uint128 newBalance = msg.value.toUint128();
@@ -63,11 +69,12 @@ contract Vault {
         locker.balance += newBalance;
         locker.unlockTime = unlockTime;
 
-        emit MoneyLocked(msg.sender, newBalance, unlockTime);
+        emit MoneyLocked(msg.sender, newBalance, _beneficiary, unlockTime);
     }
 
-    function withdraw() external {
-        Locker memory mLocker = sBalances[msg.sender];
+    //Beneficiary calls i.e msg.sender = Beneficiary
+    function withdraw(address lockerOwner) external {
+        Locker memory mLocker = sLockers[lockerOwner][msg.sender];
 
         if (mLocker.balance == 0) {
             revert Vault__NoLocker();
@@ -77,7 +84,7 @@ contract Vault {
             revert Vault__NotUnlockTime();
         }
 
-        delete sBalances[msg.sender];
+        delete sLockers[lockerOwner][msg.sender];
 
         (bool callSuccess,) = payable(msg.sender).call{value: mLocker.balance}("");
 
@@ -100,7 +107,11 @@ contract Vault {
         return uint256(rawPrice) * 1e10;
     }
 
-    function getLocker(address _address) public view returns (Locker memory) {
-        return sBalances[_address];
+    function getLocker(address _depositor, address _beneficiary) public view returns (Locker memory) {
+        return sLockers[_depositor][_beneficiary];
+    }
+
+    function getOwner() public view returns (address) {
+        return I_OWNER;
     }
 }
