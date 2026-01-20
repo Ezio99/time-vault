@@ -31,42 +31,50 @@ Designed with a **Depositor-Isolated Architecture**, the protocol facilitates se
 
 ## 🔍 Overview
 
-Time Vault addresses the need for secure, time-delayed asset transfers. Unlike simple time-lock contracts, Time Vault utilizes a nested mapping structure to allow a **Many-to-Many** relationship between Depositors and Beneficiaries. This ensures that multiple parties can fund a single beneficiary's address independently, with distinct unlock schedules and balance tracking.
+Time Vault addresses the need for secure, time-delayed asset transfers. Unlike simple time-lock contracts, Time Vault utilizes a **unique Locker ID strategy** to allow a **Many-to-Many** relationship between Depositors, Beneficiaries, and Assets.
 
-The protocol integrates **Chainlink Price Feeds** to enforce economic thresholds (minimum USD value) and employs the **Checks-Effects-Interactions** pattern to mitigate reentrancy risks.
+This ensures that multiple parties can fund a single beneficiary's address independently, using different tokens (ETH, USDC, etc.), with distinct unlock schedules and balance tracking.
+
+The protocol integrates **Chainlink Price Feeds** to enforce economic thresholds (minimum USD value) for ETH deposits and employs the **Checks-Effects-Interactions** pattern to mitigate reentrancy risks.
 
 ---
 
 ## ✨ Key Features
 
-* **Isolated Storage Pattern:** Utilizes a nested mapping strategy (`depositor => beneficiary => Locker`) to mathematically prevent unauthorized access or modification of locker terms by third parties.
+* **Universal Asset Support:** Supports both native **ETH** and any **ERC-20** token (USDC, LINK, WETH, etc.).
+* **Locker ID Pattern:** Utilizes a hashing strategy (`keccak256(token, depositor, beneficiary)`) to strictly isolate every deposit relationship.
 * **Flexible Vesting:** Supports both self-custody locking (saving) and third-party vesting (trust funds/payments).
-* **Griefing Protection:** Strict access controls ensure that only the original depositor can modify a locker's parameters, preventing malicious lock extensions.
-* **Economic Security:** Enforces a minimum deposit value (pegged to USD via Chainlink Oracles) to prevent dust attacks and spam.
-* **Gas Optimized:** Efficient storage packing and strictly typed interfaces.
+* **Griefing Protection:** Strict access controls ensure that only the original depositor can modify a locker's parameters.
+* **Economic Security:** Enforces a minimum deposit value (pegged to USD via Chainlink Oracles) for ETH deposits to prevent dust attacks.
+* **Gas Optimized:** Uses a flat mapping structure and strictly typed interfaces to minimize storage costs.
 
 ---
 
 ## 🏗 Architecture
 
 ### Storage Layout
-The core data structure is designed to isolate state based on the `msg.sender` (depositor) and the target `beneficiary`.
+The core data structure uses a flat mapping where the key is a unique hash derived from the token, depositor, and beneficiary.
 
 ```solidity
 struct Locker {
-    uint128 balance;      // Packed storage for gas optimization
-    uint128 unlockTime;   // Unix timestamp for release
+    uint256 balance;      
+    uint256 unlockTime;   // Unix timestamp for release
 }
 
-// State Variable
-mapping(address depositor => mapping(address beneficiary => Locker)) private sLockers;
+// Locker ID Pattern: Hash(Token, Depositor, Beneficiary) -> Locker
+mapping(bytes32 lockerId => Locker) private sLockers;
 
 ```
 
 ### Core Logic
 
-* **`deposit`**: Creates or appends to a locker. If a locker already exists, the unlock time is updated to `max(current_unlock_time, new_unlock_time)` to strictly enforce the longest duration.
-* **`withdraw`**: Allows the *beneficiary* to claim funds only after the `unlockTime` has elapsed. Requires the beneficiary to specify the `depositor` address to locate the correct funds.
+* **`depositEth`**: Locks native ETH. Enforces a minimum USD value (via Chainlink) to prevent dust attacks.
+* **`depositToken`**: Locks any ERC-20 token. Requires the user to `approve` the Vault contract first.
+* **`withdraw`**: Allows the *beneficiary* to claim funds only after the `unlockTime` has elapsed.
+* *Inputs:* `(tokenAddress, depositorAddress)`.
+* *Note:* Use `address(0)` as the token address to withdraw ETH.
+
+
 
 ---
 
@@ -83,29 +91,28 @@ Ensure you have the following installed on your local development environment:
 ## ⚙️ Installation
 
 1. **Clone the repository:**
+
 ```bash
 git clone [https://github.com/Ezio99/time-vault.git](https://github.com/Ezio99/time-vault.git)
 cd time-vault
 
 ```
 
-
 2. **Install Dependencies:**
 Initialize submodules and install required libraries (OpenZeppelin, Chainlink, Forge Std).
+
 ```bash
 make install
 
 ```
 
-
 3. **Build Project:**
 Compile the contracts to ensure everything is set up correctly.
+
 ```bash
 make build
 
 ```
-
-
 
 ---
 
@@ -185,4 +192,3 @@ Contributions are welcome! Please follow standard open-source guidelines:
 ## 📄 License
 
 This project is licensed under the **MIT License**.
-

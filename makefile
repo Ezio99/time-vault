@@ -20,7 +20,7 @@ clean  :; forge clean
 # Remove modules
 remove :; rm -rf .gitmodules && rm -rf .git/modules/* && rm -rf lib && touch .gitmodules && git add . && git commit -m "modules"
 
-# install :; forge install foundry-rs/forge-std@v1.14.0 && forge install smartcontractkit/chainlink-brownie-contracts@1.3.0  && forge install OpenZeppelin/openzeppelin-contracts@v5.5.0
+install :; forge install foundry-rs/forge-std@v1.14.0 && forge install smartcontractkit/chainlink-brownie-contracts@1.3.0  && forge install OpenZeppelin/openzeppelin-contracts@v5.5.0
 
 # Update Dependencies
 update:; forge update

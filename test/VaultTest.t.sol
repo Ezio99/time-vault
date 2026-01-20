@@ -5,11 +5,15 @@ import {Test, console2} from "forge-std/Test.sol";
 import {Vault} from "src/Vault.sol";
 import {DeployVault, CodeConstants} from "script/DeployVault.s.sol";
 import {MockV3Aggregator} from "@chainlink/contracts/src/v0.8/tests/MockV3Aggregator.sol";
+import {MockERC20} from "test/mocks/MockERC20.sol";
 
 contract VaultTest is Test {
-    event MoneyLocked(address indexed client, uint128 indexed balance, address indexed beneficiary, uint128 unlockTime);
+    event MoneyLocked(
+        address indexed client, address indexed token, address indexed beneficiary, uint256 unlockTime, uint256 balance
+    );
 
     MockV3Aggregator mockV3Aggregator;
+    MockERC20 mockToken;
     Vault vault;
 
     uint256 public constant AMOUNT_TO_SEND = 0.5 ether;
@@ -17,14 +21,16 @@ contract VaultTest is Test {
 
     address LOCKER_OWNER = makeAddr("vault_test_user_unique_123");
     address BENEFICARY = makeAddr("vault_test_beneficiary_unique_123");
+    address public constant ETH_ADDRESS = address(0);
 
     function setUp() public {
         DeployVault deployer = new DeployVault();
         vault = deployer.deploy();
         mockV3Aggregator = MockV3Aggregator(address(vault.I_PRICE_FEED()));
-        // Set an initial price (e.g., $2000 ETH/USD with 8 decimals)
-        // mockV3Aggregator.updateAnswer(2000e8);
         vm.deal(LOCKER_OWNER, DEAL_AMOUNT);
+
+        mockToken = new MockERC20();
+        mockToken.mint(LOCKER_OWNER, 1000 ether);
     }
 
     //MARK: Utility functions
@@ -35,7 +41,7 @@ contract VaultTest is Test {
         address _beneficiary
     ) public {
         vm.prank(_lockerOwner);
-        vault.deposit{value: _amountToDeposit}(_secondsToLockMoney, _beneficiary);
+        vault.depositEth{value: _amountToDeposit}(_secondsToLockMoney, _beneficiary);
     }
 
     function depositMoney(uint256 _secondsToLockMoney, uint256 _amountToDeposit) public {
@@ -46,20 +52,20 @@ contract VaultTest is Test {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
     }
 
-    function withdrawMoney(address _beneficiary, address _lockerOwner) public {
+    function withdrawMoney(address _token, address _beneficiary, address _lockerOwner) public {
         vm.prank(_beneficiary);
-        vault.withdraw(_lockerOwner);
+        vault.withdraw(_token, _lockerOwner);
     }
 
     function withdrawMoney() public {
-        withdrawMoney(BENEFICARY, LOCKER_OWNER);
+        withdrawMoney(ETH_ADDRESS, BENEFICARY, LOCKER_OWNER);
     }
 
     //MARK: Deposit
 
     function testDepositMoney() public {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
-        assertEq(vault.getLocker(LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND);
+        assertEq(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND);
     }
 
     function testDepositLessMoney() public {
@@ -80,63 +86,66 @@ contract VaultTest is Test {
     function testDepositWithLessTime() public {
         uint256 time = vault.MIN_TIME_TO_LOCK() - 1;
 
-        vm.prank(LOCKER_OWNER);
         vm.expectRevert(Vault.Vault__TooLittleTimeToLock.selector);
-        vault.deposit{value: AMOUNT_TO_SEND}(time, BENEFICARY);
+        depositMoney(time, AMOUNT_TO_SEND);
     }
 
     function testDepositWithMoreTime() public {
         uint256 time = vault.MAX_TIME_TO_LOCK() + 1;
 
-        vm.prank(LOCKER_OWNER);
         vm.expectRevert(Vault.Vault__TooMuchTimeToLock.selector);
-        vault.deposit{value: AMOUNT_TO_SEND}(time, BENEFICARY);
+        depositMoney(time, AMOUNT_TO_SEND);
     }
 
     function testTopUpLocker() public {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
 
-        assertEq(vault.getLocker(LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND * 2);
+        assertEq(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND * 2);
     }
 
     function testTopUpLockerVariableTime() public {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
         depositMoney(vault.MAX_TIME_TO_LOCK() - 1, AMOUNT_TO_SEND);
 
-        assertEq(vault.getLocker(LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND * 2);
-        assertEq(vault.getLocker(LOCKER_OWNER, BENEFICARY).unlockTime, block.timestamp + vault.MAX_TIME_TO_LOCK() - 1);
+        assertEq(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND * 2);
+        assertEq(
+            vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).unlockTime,
+            block.timestamp + vault.MAX_TIME_TO_LOCK() - 1
+        );
     }
 
     function testCannotShortenLockTime() public {
         uint256 longTime = 1000;
         depositMoney(longTime, AMOUNT_TO_SEND);
-        uint256 initialUnlockTime = vault.getLocker(LOCKER_OWNER, BENEFICARY).unlockTime;
+        uint256 initialUnlockTime = vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).unlockTime;
 
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
 
-        uint256 finalUnlockTime = vault.getLocker(LOCKER_OWNER, BENEFICARY).unlockTime;
+        uint256 finalUnlockTime = vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).unlockTime;
         assertEq(finalUnlockTime, initialUnlockTime);
     }
 
     //MARK: Withdraw
     function testSuccessfulWithdraw() public {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
-        assertEq(vault.getLocker(LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND);
+        assertEq(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND);
         assertEq(LOCKER_OWNER.balance, DEAL_AMOUNT - AMOUNT_TO_SEND);
 
-        vm.warp(vault.getLocker(LOCKER_OWNER, BENEFICARY).unlockTime + 1);
+        vm.warp(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).unlockTime + 1);
         withdrawMoney();
         assertEq(BENEFICARY.balance, AMOUNT_TO_SEND);
     }
 
     function testSuccessfulWithdrawToSelf() public {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND, LOCKER_OWNER, LOCKER_OWNER);
-        assertEq(vault.getLocker(LOCKER_OWNER, LOCKER_OWNER).balance, AMOUNT_TO_SEND);
+
+        assertEq(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, LOCKER_OWNER).balance, AMOUNT_TO_SEND);
         assertEq(LOCKER_OWNER.balance, DEAL_AMOUNT - AMOUNT_TO_SEND);
 
-        vm.warp(vault.getLocker(LOCKER_OWNER, LOCKER_OWNER).unlockTime + 1);
-        withdrawMoney(LOCKER_OWNER, LOCKER_OWNER);
+        vm.warp(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, LOCKER_OWNER).unlockTime + 1);
+        withdrawMoney(ETH_ADDRESS, LOCKER_OWNER, LOCKER_OWNER);
+
         assertEq(LOCKER_OWNER.balance, DEAL_AMOUNT);
     }
 
@@ -147,7 +156,7 @@ contract VaultTest is Test {
 
     function testWithdrawBeforeTime() public {
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
-        assertEq(vault.getLocker(LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND);
+        assertEq(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).balance, AMOUNT_TO_SEND);
         assertEq(LOCKER_OWNER.balance, DEAL_AMOUNT - AMOUNT_TO_SEND);
 
         vm.expectRevert(Vault.Vault__NotUnlockTime.selector);
@@ -162,17 +171,16 @@ contract VaultTest is Test {
 
         // 1. Dad deposits for Beneficiary
         vm.deal(DAD, 1 ether);
-        vm.prank(DAD);
-        vault.deposit{value: 1 ether}(time, BENEFICARY);
+        // vault.deposit{value: 1 ether}(time, BENEFICARY);
+        depositMoney(time, 1 ether, DAD, BENEFICARY);
 
         // 2. Mom deposits for SAME Beneficiary
         vm.deal(MOM, 1 ether);
-        vm.prank(MOM);
-        vault.deposit{value: 1 ether}(time, BENEFICARY);
+        depositMoney(time, 1 ether, MOM, BENEFICARY);
 
         // 3. Verify Beneficiary has TWO separate lockers
-        uint128 dadBalance = vault.getLocker(DAD, BENEFICARY).balance;
-        uint128 momBalance = vault.getLocker(MOM, BENEFICARY).balance;
+        uint256 dadBalance = vault.getLocker(ETH_ADDRESS, DAD, BENEFICARY).balance;
+        uint256 momBalance = vault.getLocker(ETH_ADDRESS, MOM, BENEFICARY).balance;
 
         assertEq(dadBalance, 1 ether);
         assertEq(momBalance, 1 ether);
@@ -190,16 +198,14 @@ contract VaultTest is Test {
         vm.deal(UNCLE, 10 ether);
 
         // 1. Uncle deposits for Nephew A
-        vm.prank(UNCLE);
-        vault.deposit{value: amountA}(minTime, NEPHEW_A);
+        depositMoney(minTime, amountA, UNCLE, NEPHEW_A);
 
         // 2. Uncle deposits for Nephew B
-        vm.prank(UNCLE);
-        vault.deposit{value: amountB}(minTime, NEPHEW_B);
+        depositMoney(minTime, amountB, UNCLE, NEPHEW_B);
 
         // 3. Verify Separation
-        uint128 balA = vault.getLocker(UNCLE, NEPHEW_A).balance;
-        uint128 balB = vault.getLocker(UNCLE, NEPHEW_B).balance;
+        uint256 balA = vault.getLocker(ETH_ADDRESS, UNCLE, NEPHEW_A).balance;
+        uint256 balB = vault.getLocker(ETH_ADDRESS, UNCLE, NEPHEW_B).balance;
 
         assertEq(balA, amountA);
         assertEq(balB, amountB);
@@ -216,25 +222,23 @@ contract VaultTest is Test {
         vm.deal(DAD, 10 ether);
 
         // 1. Dad locks for Son (Short)
-        vm.prank(DAD);
-        vault.deposit{value: 1 ether}(shortTime, SON);
+        depositMoney(shortTime, 1 ether, DAD, SON);
 
         // 2. Dad locks for Daughter (Long)
-        vm.prank(DAD);
-        vault.deposit{value: 1 ether}(longTime, DAUGHTER);
+        depositMoney(longTime, 1 ether, DAD, DAUGHTER);
 
         // 3. Fast forward past Son's time but BEFORE Daughter's time
         vm.warp(block.timestamp + shortTime + 1);
 
         // 4. Son should succeed
         vm.prank(SON);
-        vault.withdraw(DAD);
+        vault.withdraw(ETH_ADDRESS, DAD);
         assertEq(SON.balance, 1 ether);
 
         // 5. Daughter should FAIL (Too early)
         vm.prank(DAUGHTER);
         vm.expectRevert(Vault.Vault__NotUnlockTime.selector);
-        vault.withdraw(DAD);
+        vault.withdraw(ETH_ADDRESS, DAD);
     }
 
     function testWithdrawFromWrongDepositorFails() public {
@@ -246,15 +250,14 @@ contract VaultTest is Test {
 
         // 1. Alice funds Bob
         vm.deal(ALICE, 1 ether);
-        vm.prank(ALICE);
-        vault.deposit{value: 1 ether}(minTime, BOB);
+        depositMoney(minTime, 1 ether, ALICE, BOB);
 
         // 2. Bob tries to claim money from Charlie (who never sent him anything)
         vm.warp(block.timestamp + minTime + 1);
 
         vm.prank(BOB);
         vm.expectRevert(Vault.Vault__NoLocker.selector);
-        vault.withdraw(CHARLIE);
+        vault.withdraw(ETH_ADDRESS, CHARLIE);
     }
 
     function testFuzzDeposit(uint256 amount, uint256 time) public {
@@ -265,19 +268,17 @@ contract VaultTest is Test {
         vm.deal(LOCKER_OWNER, amount);
         vm.prank(LOCKER_OWNER);
 
-        vault.deposit{value: amount}(time, BENEFICARY);
+        vault.depositEth{value: amount}(time, BENEFICARY);
 
-        assertEq(vault.getLocker(LOCKER_OWNER, BENEFICARY).balance, amount);
+        assertEq(vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY).balance, amount);
     }
 
     function testRevertIfPriceIsNegative() public skipWhenForking {
         mockV3Aggregator.updateAnswer(-100);
         uint256 time = vault.MIN_TIME_TO_LOCK();
 
-        vm.prank(LOCKER_OWNER);
         vm.expectRevert(Vault.Vault__PriceIsNegative.selector);
-
-        vault.deposit{value: AMOUNT_TO_SEND}(time, BENEFICARY);
+        depositMoney(time, AMOUNT_TO_SEND);
     }
 
     //MARK: Events
@@ -285,8 +286,149 @@ contract VaultTest is Test {
         vm.expectEmit(true, true, true, true, address(vault));
 
         uint128 expectedUnlock = uint128(block.timestamp + vault.MIN_TIME_TO_LOCK());
-        emit MoneyLocked(LOCKER_OWNER, uint128(AMOUNT_TO_SEND), BENEFICARY, expectedUnlock);
+        emit MoneyLocked(LOCKER_OWNER, ETH_ADDRESS, BENEFICARY, expectedUnlock, AMOUNT_TO_SEND);
 
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
+    }
+
+    // MARK: ERC20 Tests
+
+    function testDepositERC20() public {
+        uint256 amount = 50 ether;
+        uint256 time = vault.MIN_TIME_TO_LOCK();
+
+        vm.startPrank(LOCKER_OWNER);
+        // 1. User MUST approve Vault first
+        mockToken.approve(address(vault), amount);
+        // 2. Deposit
+        vault.depositToken(address(mockToken), amount, time, BENEFICARY);
+        vm.stopPrank();
+
+        // 3. Verify Balance
+        Vault.Locker memory locker = vault.getLocker(address(mockToken), LOCKER_OWNER, BENEFICARY);
+        assertEq(locker.balance, amount);
+    }
+
+    function testWithdrawERC20() public {
+        // 1. Setup
+        uint256 amount = 50 ether;
+        uint256 time = vault.MIN_TIME_TO_LOCK();
+
+        vm.startPrank(LOCKER_OWNER);
+        mockToken.approve(address(vault), amount);
+        vault.depositToken(address(mockToken), amount, time, BENEFICARY);
+        vm.stopPrank();
+
+        // 2. Fast forward
+        vm.warp(block.timestamp + time + 1);
+
+        // 3. Beneficiary Withdraws
+        vm.prank(BENEFICARY);
+        vault.withdraw(address(mockToken), LOCKER_OWNER);
+
+        // 4. Check Beneficiary received tokens
+        assertEq(mockToken.balanceOf(BENEFICARY), amount);
+
+        // 5. Check Vault is empty
+        Vault.Locker memory locker = vault.getLocker(address(mockToken), LOCKER_OWNER, BENEFICARY);
+        assertEq(locker.balance, 0);
+    }
+
+    function testDepositERC20FailsWithoutApproval() public {
+        uint256 amount = 50 ether;
+        uint256 time = vault.MIN_TIME_TO_LOCK();
+
+        vm.startPrank(LOCKER_OWNER);
+        // We SKIP the approve step here!
+
+        vm.expectRevert(); // Should fail because Vault can't pull tokens
+        vault.depositToken(address(mockToken), amount, time, BENEFICARY);
+        vm.stopPrank();
+    }
+
+    function testWithdrawERC20WithWrongTokenAddress() public {
+        uint256 amount = 50 ether;
+        uint256 time = vault.MIN_TIME_TO_LOCK();
+
+        // 1. Deposit MockToken (MCK)
+        vm.startPrank(LOCKER_OWNER);
+        mockToken.approve(address(vault), amount);
+        vault.depositToken(address(mockToken), amount, time, BENEFICARY);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + time + 1);
+
+        // 2. Create a SECOND fake token
+        MockERC20 randomToken = new MockERC20();
+
+        // 3. Try to withdraw the WRONG token
+        vm.prank(BENEFICARY);
+        vm.expectRevert(Vault.Vault__NoLocker.selector);
+        vault.withdraw(address(randomToken), LOCKER_OWNER);
+    }
+
+    function testFuzzDepositERC20(uint256 amount, uint256 time) public {
+        // 1. Sanitize Inputs (Fuzzers can generate crazy numbers)
+        //    - Amount: 1 wei to 1 Million tokens
+        //    - Time: Min to Max lock time
+        amount = bound(amount, 1, 1_000_000 ether);
+        time = bound(time, vault.MIN_TIME_TO_LOCK(), vault.MAX_TIME_TO_LOCK());
+
+        // 2. Setup: Mint fresh tokens for this random amount
+        mockToken.mint(LOCKER_OWNER, amount);
+
+        // 3. Execute: Approve & Deposit
+        vm.startPrank(LOCKER_OWNER);
+        mockToken.approve(address(vault), amount);
+        vault.depositToken(address(mockToken), amount, time, BENEFICARY);
+        vm.stopPrank();
+
+        // 4. Verify: Did the math work?
+        Vault.Locker memory locker = vault.getLocker(address(mockToken), LOCKER_OWNER, BENEFICARY);
+        assertEq(locker.balance, amount);
+        assertEq(locker.unlockTime, block.timestamp + time);
+    }
+
+    function testTopUpERC20() public {
+        uint256 amount = 10 ether;
+        uint256 time = vault.MIN_TIME_TO_LOCK();
+
+        vm.startPrank(LOCKER_OWNER);
+        // Approve enough for TWO deposits
+        mockToken.approve(address(vault), amount * 2);
+
+        // 1. First Deposit
+        vault.depositToken(address(mockToken), amount, time, BENEFICARY);
+
+        // 2. Top Up (Second Deposit)
+        vault.depositToken(address(mockToken), amount, time, BENEFICARY);
+        vm.stopPrank();
+
+        // 3. Verify: Balance should be 2x
+        Vault.Locker memory locker = vault.getLocker(address(mockToken), LOCKER_OWNER, BENEFICARY);
+        assertEq(locker.balance, amount * 2);
+    }
+
+    function testEthAndTokenLockersAreIsolated() public {
+        uint256 amount = 1 ether;
+        uint256 time = vault.MIN_TIME_TO_LOCK();
+
+        vm.startPrank(LOCKER_OWNER);
+
+        // 1. Deposit ETH
+        vault.depositEth{value: amount}(time, BENEFICARY);
+
+        // 2. Deposit Tokens (Same User, Same Beneficiary, Same Amount)
+        mockToken.approve(address(vault), amount);
+        vault.depositToken(address(mockToken), amount, time, BENEFICARY);
+        vm.stopPrank();
+
+        // 3. Check Separation
+        Vault.Locker memory ethLocker = vault.getLocker(ETH_ADDRESS, LOCKER_OWNER, BENEFICARY);
+        Vault.Locker memory tokenLocker = vault.getLocker(address(mockToken), LOCKER_OWNER, BENEFICARY);
+
+        // Both should exist independently
+        assertEq(ethLocker.balance, amount);
+        assertEq(tokenLocker.balance, amount);
     }
 }
