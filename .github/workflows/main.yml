@@ -1,0 +1,30 @@
+name: Fork Test (Sepolia)
+
+on:
+  workflow_dispatch:
+
+  pull_request:
+    branches:
+    - master
+
+  # 3. Keep the nightly schedule (optional)
+  schedule:
+    - cron: '0 0 * * *'
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  fork-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run Fork Tests
+        run: forge test --fork-url ${{ secrets.ALCHEMY_SEPOLIA_RPC_URL }} -vvv
