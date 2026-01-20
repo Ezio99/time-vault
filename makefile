@@ -29,6 +29,8 @@ build:; forge build
 
 test :; forge test 
 
+coverage :; forge coverage --report lcov
+
 fork-test :; forge test  -vvvv --fork-url $(ALCHEMY_SEPOLIA_RPC_URL)
 
 snapshot :; forge snapshot

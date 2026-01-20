@@ -158,8 +158,8 @@ contract VaultTest is Test {
         address DAD = makeAddr("dad");
         address MOM = makeAddr("mom");
 
-        uint256 time =  vault.MIN_TIME_TO_LOCK();
-        
+        uint256 time = vault.MIN_TIME_TO_LOCK();
+
         // 1. Dad deposits for Beneficiary
         vm.deal(DAD, 1 ether);
         vm.prank(DAD);
@@ -182,13 +182,13 @@ contract VaultTest is Test {
         address UNCLE = makeAddr("uncle");
         address NEPHEW_A = makeAddr("nephewA");
         address NEPHEW_B = makeAddr("nephewB");
-        
+
         uint256 amountA = 1 ether;
         uint256 amountB = 2 ether;
         uint256 minTime = vault.MIN_TIME_TO_LOCK();
 
         vm.deal(UNCLE, 10 ether);
-        
+
         // 1. Uncle deposits for Nephew A
         vm.prank(UNCLE);
         vault.deposit{value: amountA}(minTime, NEPHEW_A);
@@ -210,9 +210,9 @@ contract VaultTest is Test {
         address SON = makeAddr("son");
         address DAUGHTER = makeAddr("daughter");
 
-        uint256 shortTime = vault.MIN_TIME_TO_LOCK();      // 60 seconds
-        uint256 longTime = vault.MIN_TIME_TO_LOCK() * 10;  // 600 seconds
-        
+        uint256 shortTime = vault.MIN_TIME_TO_LOCK(); // 60 seconds
+        uint256 longTime = vault.MIN_TIME_TO_LOCK() * 10; // 600 seconds
+
         vm.deal(DAD, 10 ether);
 
         // 1. Dad locks for Son (Short)
@@ -241,7 +241,7 @@ contract VaultTest is Test {
         address ALICE = makeAddr("alice");
         address BOB = makeAddr("bob"); // Alice deposits for Bob
         address CHARLIE = makeAddr("charlie"); // Charlie did NOT deposit for Bob
-        
+
         uint256 minTime = vault.MIN_TIME_TO_LOCK();
 
         // 1. Alice funds Bob
@@ -251,7 +251,7 @@ contract VaultTest is Test {
 
         // 2. Bob tries to claim money from Charlie (who never sent him anything)
         vm.warp(block.timestamp + minTime + 1);
-        
+
         vm.prank(BOB);
         vm.expectRevert(Vault.Vault__NoLocker.selector);
         vault.withdraw(CHARLIE);
@@ -289,7 +289,4 @@ contract VaultTest is Test {
 
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
     }
-
-
-    
 }
