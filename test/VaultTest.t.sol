@@ -136,7 +136,7 @@ contract VaultTest is Test {
         assertEq(LOCKER_OWNER.balance, DEAL_AMOUNT - AMOUNT_TO_SEND);
 
         vm.warp(vault.getLocker(LOCKER_OWNER, LOCKER_OWNER).unlockTime + 1);
-        withdrawMoney(LOCKER_OWNER,LOCKER_OWNER);
+        withdrawMoney(LOCKER_OWNER, LOCKER_OWNER);
         assertEq(LOCKER_OWNER.balance, DEAL_AMOUNT);
     }
 
@@ -182,7 +182,7 @@ contract VaultTest is Test {
         vm.expectEmit(true, true, true, true, address(vault));
 
         uint128 expectedUnlock = uint128(block.timestamp + vault.MIN_TIME_TO_LOCK());
-        emit MoneyLocked(LOCKER_OWNER, uint128(AMOUNT_TO_SEND), BENEFICARY,expectedUnlock);
+        emit MoneyLocked(LOCKER_OWNER, uint128(AMOUNT_TO_SEND), BENEFICARY, expectedUnlock);
 
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
     }
