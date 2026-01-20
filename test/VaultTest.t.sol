@@ -154,6 +154,109 @@ contract VaultTest is Test {
         withdrawMoney();
     }
 
+    function testMultipleDepositorsForSameBeneficiary() public {
+        address DAD = makeAddr("dad");
+        address MOM = makeAddr("mom");
+
+        uint256 time =  vault.MIN_TIME_TO_LOCK();
+        
+        // 1. Dad deposits for Beneficiary
+        vm.deal(DAD, 1 ether);
+        vm.prank(DAD);
+        vault.deposit{value: 1 ether}(time, BENEFICARY);
+
+        // 2. Mom deposits for SAME Beneficiary
+        vm.deal(MOM, 1 ether);
+        vm.prank(MOM);
+        vault.deposit{value: 1 ether}(time, BENEFICARY);
+
+        // 3. Verify Beneficiary has TWO separate lockers
+        uint128 dadBalance = vault.getLocker(DAD, BENEFICARY).balance;
+        uint128 momBalance = vault.getLocker(MOM, BENEFICARY).balance;
+
+        assertEq(dadBalance, 1 ether);
+        assertEq(momBalance, 1 ether);
+    }
+
+    function testOneDepositorManyBeneficiaries() public {
+        address UNCLE = makeAddr("uncle");
+        address NEPHEW_A = makeAddr("nephewA");
+        address NEPHEW_B = makeAddr("nephewB");
+        
+        uint256 amountA = 1 ether;
+        uint256 amountB = 2 ether;
+        uint256 minTime = vault.MIN_TIME_TO_LOCK();
+
+        vm.deal(UNCLE, 10 ether);
+        
+        // 1. Uncle deposits for Nephew A
+        vm.prank(UNCLE);
+        vault.deposit{value: amountA}(minTime, NEPHEW_A);
+
+        // 2. Uncle deposits for Nephew B
+        vm.prank(UNCLE);
+        vault.deposit{value: amountB}(minTime, NEPHEW_B);
+
+        // 3. Verify Separation
+        uint128 balA = vault.getLocker(UNCLE, NEPHEW_A).balance;
+        uint128 balB = vault.getLocker(UNCLE, NEPHEW_B).balance;
+
+        assertEq(balA, amountA);
+        assertEq(balB, amountB);
+    }
+
+    function testDifferentUnlockTimesForDifferentBeneficiaries() public {
+        address DAD = makeAddr("dad");
+        address SON = makeAddr("son");
+        address DAUGHTER = makeAddr("daughter");
+
+        uint256 shortTime = vault.MIN_TIME_TO_LOCK();      // 60 seconds
+        uint256 longTime = vault.MIN_TIME_TO_LOCK() * 10;  // 600 seconds
+        
+        vm.deal(DAD, 10 ether);
+
+        // 1. Dad locks for Son (Short)
+        vm.prank(DAD);
+        vault.deposit{value: 1 ether}(shortTime, SON);
+
+        // 2. Dad locks for Daughter (Long)
+        vm.prank(DAD);
+        vault.deposit{value: 1 ether}(longTime, DAUGHTER);
+
+        // 3. Fast forward past Son's time but BEFORE Daughter's time
+        vm.warp(block.timestamp + shortTime + 1);
+
+        // 4. Son should succeed
+        vm.prank(SON);
+        vault.withdraw(DAD);
+        assertEq(SON.balance, 1 ether);
+
+        // 5. Daughter should FAIL (Too early)
+        vm.prank(DAUGHTER);
+        vm.expectRevert(Vault.Vault__NotUnlockTime.selector);
+        vault.withdraw(DAD);
+    }
+
+    function testWithdrawFromWrongDepositorFails() public {
+        address ALICE = makeAddr("alice");
+        address BOB = makeAddr("bob"); // Alice deposits for Bob
+        address CHARLIE = makeAddr("charlie"); // Charlie did NOT deposit for Bob
+        
+        uint256 minTime = vault.MIN_TIME_TO_LOCK();
+
+        // 1. Alice funds Bob
+        vm.deal(ALICE, 1 ether);
+        vm.prank(ALICE);
+        vault.deposit{value: 1 ether}(minTime, BOB);
+
+        // 2. Bob tries to claim money from Charlie (who never sent him anything)
+        vm.warp(block.timestamp + minTime + 1);
+        
+        vm.prank(BOB);
+        vm.expectRevert(Vault.Vault__NoLocker.selector);
+        vault.withdraw(CHARLIE);
+    }
+
     function testFuzzDeposit(uint256 amount, uint256 time) public {
         amount = bound(amount, 0.1 ether, 100_000 ether);
 
@@ -186,4 +289,7 @@ contract VaultTest is Test {
 
         depositMoney(vault.MIN_TIME_TO_LOCK(), AMOUNT_TO_SEND);
     }
+
+
+    
 }
