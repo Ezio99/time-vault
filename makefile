@@ -42,4 +42,5 @@ anvil :; anvil -m 'test test test test test test test test test test test junk' 
 
 deploy-sepolia :; forge script script/DeployVault.s.sol:DeployVault --rpc-url $(ALCHEMY_SEPOLIA_RPC_URL) --account MetaMask --sender $(METAMASK_ACCOUNT) --broadcast --password $(LOCAL_PASSWORD) --etherscan-api-key $(ETHERSCAN_API_KEY) -vvvv --verify
 
+display-abi:; forge inspect src/Vault.sol:Vault abi --json > VaultAbi.json
 
