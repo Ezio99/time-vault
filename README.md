@@ -4,6 +4,8 @@
 
 Designed with a **Depositor-Isolated Architecture**, the protocol facilitates secure, trust-minimized fund management for self-custody, inheritance planning, and third-party vesting without the risk of storage collision or griefing attacks.
 
+Sample contract deployed on Sepolia at - 0x38B1E30Da393ac75217D746714c5fbc256282185
+
 ---
 
 ## 📖 Table of Contents
